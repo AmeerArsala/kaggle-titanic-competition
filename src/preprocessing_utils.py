@@ -89,12 +89,13 @@ class DropFeatures(BaseEstimator, TransformerMixin):
 
 # assume operation on a pandas DataFrame
 class AddCluster(BaseEstimator, TransformerMixin):
-    def __init__(self, cluster_features, kmeans, column_name="Cluster"):
+    def __init__(self, cluster_features, kmeans, column_name="Cluster", drop_clustered_features=False):
         super().__init__()
         self.cluster_features = cluster_features
         self.kmeans = kmeans
         self.column_name = column_name
         self.actual_cluster_column_names = []
+        self.drop_clustered_features = drop_clustered_features
 
     def fit(self, X, y=None):
         return self
@@ -105,24 +106,27 @@ class AddCluster(BaseEstimator, TransformerMixin):
         self.actual_cluster_column_names = alike_matches(strings=X_.columns, substrings=self.cluster_features)
         #print(self.actual_cluster_column_names)
 
-        X_cluster = X_.drop(self.actual_cluster_column_names, axis=1)
+        X_cluster = X_[self.actual_cluster_column_names]
 
         X_[self.column_name] = self.kmeans.fit_predict(X_cluster).astype(np.float64)  # It's clustering time!
         #X_[self.column_name] = X_[self.column_name].astype("category")
 
         #print(X_.dtypes)
 
+        if self.drop_clustered_features:
+            X_ = X_.drop(self.actual_cluster_column_names, axis=1)
+
         return X_
 
 
 # use this in pipelines
-def add_onehot_cluster(cluster_features, kmeans, column_name="Cluster"):
+def add_onehot_cluster(cluster_features, kmeans, column_name="Cluster", drop_clustered_features=False):
     onehot_encoder = ColumnTransformer([
         ("onehot encoder", OneHotEncoder(sparse=True, dtype=np.float64), [column_name])
     ], remainder="passthrough")
 
     return Pipeline([
-        ("add kmeans cluster", AddCluster(cluster_features, kmeans, column_name=column_name)),
+        ("add kmeans cluster", AddCluster(cluster_features, kmeans, column_name=column_name, drop_clustered_features=drop_clustered_features)),
         ("onehot encode cluster", onehot_encoder)#,
         #("wrap as pandas dataframe", WrapAsDataFrame(prev_preprocessor=onehot_encoder)),
         #("as numpy", AsNumPy(verbose=True))
